@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InternVerify — Digital Internship Certificate Verification</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'DM Sans',system-ui,sans-serif;background:#0a1628;color:#f0f4ff;min-height:100vh;overflow-x:hidden}
+h1,h2,h3,h4{font-family:'Syne',sans-serif}
+input,button,select,textarea{font-family:inherit}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a1628}
+::-webkit-scrollbar-thumb{background:#1e5af5;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useCallback, useEffect } = React;
+
+// ─── DATA ───
+const INIT_CERTS = [
+  { id:"IV-2025-A7K3P9", studentName:"Arjun Mehta", studentId:"STU-2024-001", company:"TechCorp India", role:"Frontend Developer Intern", startDate:"2024-06-01", endDate:"2024-08-31", issuedDate:"2024-09-02", status:"valid" },
+  { id:"IV-2025-B2M9X1", studentName:"Arjun Mehta", studentId:"STU-2024-001", company:"Innovate Labs", role:"UI/UX Design Intern", startDate:"2024-01-10", endDate:"2024-03-10", issuedDate:"2024-03-12", status:"valid" },
+  { id:"IV-2024-C5R7W8", studentName:"Arjun Mehta", studentId:"STU-2024-001", company:"StartupHub", role:"Data Analyst Intern", startDate:"2023-10-01", endDate:"2023-12-01", issuedDate:"2023-12-05", status:"valid" },
+];
+
+// ─── UTILS ───
+const getDur = (s,e) => { if(!s||!e) return "N/A"; const m=Math.round((new Date(e)-new Date(s))/(1000*60*60*24*30.44)); const d=Math.round((new Date(e)-new Date(s))/(1000*60*60*24)); return m>=1?`${m} month${m>1?"s":""}`:`${d} days`; };
+const fmt = d => { if(!d) return ""; return new Date(d+"T00:00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}); };
+const genId = () => "IV-"+new Date().getFullYear()+"-"+Math.random().toString(36).substr(2,6).toUpperCase();
+
+// ─── COLORS ───
+const C = {
+  navy:"#0a1628", navyMid:"#112240", navyLight:"#1a3461",
+  blue:"#1e5af5", blueBright:"#3d7fff", cyan:"#00d4ff",
+  white:"#f0f4ff", whiteDim:"rgba(240,244,255,0.65)", whiteFaint:"rgba(240,244,255,0.08)",
+  green:"#00e5a0", red:"#ff4d6d", amber:"#ffb830",
+  border:"rgba(30,90,245,0.25)", card:"rgba(17,34,64,0.95)"
+};
+
+// ─── BUTTON ───
+const Btn = ({children, v="primary", size="md", onClick, style={}}) => {
+  const [hov,setHov] = useState(false);
+  const base = { display:"inline-flex", alignItems:"center", gap:6, border:"none", borderRadius:9, cursor:"pointer", fontWeight:500, transition:"all 0.18s", padding: size==="sm"?"7px 14px":"11px 22px", fontSize: size==="sm"?13:15 };
+  const variants = {
+    primary:{ background: hov?"#3d7fff":"#1e5af5", color:"white", boxShadow: hov?"0 6px 20px rgba(30,90,245,0.4)":"none" },
+    outline:{ background: hov?"rgba(240,244,255,0.07)":"transparent", color:C.white, border:"1px solid rgba(30,90,245,0.35)" },
+    cyan:{ background: hov?"#33ddff":"#00d4ff", color:C.navy },
+    danger:{ background: hov?"rgba(255,77,109,0.22)":"rgba(255,77,109,0.12)", color:C.red, border:"1px solid rgba(255,77,109,0.3)" },
+    success:{ background: hov?"rgba(0,229,160,0.22)":"rgba(0,229,160,0.12)", color:C.green, border:"1px solid rgba(0,229,160,0.3)" },
+    ghost:{ background:"transparent", color:C.whiteDim, border:"none" }
+  };
+  return <button style={{...base,...variants[v],...style}} onClick={onClick} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>{children}</button>;
+};
+
+// ─── BADGE ───
+const Badge = ({status}) => {
+  const m = { valid:{bg:"rgba(0,229,160,0.12)",c:C.green,b:"rgba(0,229,160,0.25)",l:"Valid"}, invalid:{bg:"rgba(255,77,109,0.12)",c:C.red,b:"rgba(255,77,109,0.25)",l:"Invalid"}, pending:{bg:"rgba(255,184,48,0.12)",c:C.amber,b:"rgba(255,184,48,0.25)",l:"Pending"}, approved:{bg:"rgba(0,229,160,0.12)",c:C.green,b:"rgba(0,229,160,0.25)",l:"Approved"} };
+  const s = m[status]||m.pending;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:500,background:s.bg,color:s.c,border:`1px solid ${s.b}`}}>● {s.l}</span>;
+};
+
+// ─── INPUT ───
+const Input = ({label, type="text", placeholder, value, onChange, onKeyDown, readOnly, style={}}) => (
+  <div style={{marginBottom:16}}>
+    {label && <label style={{display:"block",fontSize:12,color:C.whiteDim,marginBottom:7,fontWeight:500}}>{label}</label>}
+    <input type={type} placeholder={placeholder} value={value} onChange={onChange} onKeyDown={onKeyDown} readOnly={readOnly}
+      style={{width:"100%",padding:"11px 14px",borderRadius:9,background:"rgba(255,255,255,0.06)",border:`1px solid ${C.border}`,color:C.white,fontSize:15,outline:"none",boxSizing:"border-box",...style}} />
+  </div>
+);
+
+// ─── TOAST ───
+const Toast = ({title, body, visible}) => (
+  <div style={{position:"fixed",bottom:24,right:24,zIndex:9999,background:C.navyLight,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px",maxWidth:290,boxShadow:"0 20px 60px rgba(0,0,0,0.5)",transform:visible?"none":"translateX(350px)",transition:"transform 0.4s cubic-bezier(0.34,1.56,0.64,1)",pointerEvents:"none"}}>
+    <div style={{fontWeight:700,fontSize:14,marginBottom:3}}>{title}</div>
+    <div style={{fontSize:12,color:C.whiteDim}}>{body}</div>
+  </div>
+);
+
+// ─── CERT CARD ───
+const CertCard = ({cert}) => (
+  <div style={{background:"linear-gradient(135deg,#f8f9ff,#e4eeff)",borderRadius:14,padding:28,color:"#0a1628",border:"2px solid rgba(30,90,245,0.25)"}}>
+    <div style={{textAlign:"center",marginBottom:16,borderBottom:"2px solid rgba(30,90,245,0.1)",paddingBottom:14}}>
+      <div style={{fontSize:11,color:"#1e5af5",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase"}}>{cert.company}</div>
+      <div style={{fontSize:22,fontWeight:800,color:"#0a1628",margin:"6px 0 3px"}}>Certificate of Internship</div>
+      <div style={{fontSize:12,color:"#4a6b9a"}}>Authentic digital certificate issued via InternVerify</div>
+    </div>
+    <div style={{textAlign:"center",margin:"14px 0"}}>
+      <div style={{fontSize:12,color:"#4a6b9a",marginBottom:5}}>This certificate is proudly presented to</div>
+      <div style={{fontSize:26,fontWeight:800,color:"#1e5af5",marginBottom:7}}>{cert.studentName}</div>
+      <div style={{fontSize:13,color:"#2a4a7a",lineHeight:1.7}}>for successfully completing an internship as<br/><strong>{cert.role}</strong><br/>at {cert.company}</div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,margin:"14px 0"}}>
+      {[["Duration",getDur(cert.startDate,cert.endDate)],["Period",`${fmt(cert.startDate)} – ${fmt(cert.endDate)}`],["Student ID",cert.studentId],["Issue Date",fmt(cert.issuedDate)]].map(([l,v])=>(
+        <div key={l} style={{background:"rgba(30,90,245,0.06)",borderRadius:8,padding:10}}>
+          <div style={{fontSize:10,color:"#4a6b9a",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{l}</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#0a1628",marginTop:3}}>{v}</div>
+        </div>
+      ))}
+    </div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:12,borderTop:"1px solid rgba(30,90,245,0.1)",fontSize:11,color:"#4a6b9a"}}>
+      <span>✅ Verified by InternVerify</span>
+      <span style={{background:"#1e5af5",color:"white",padding:"3px 12px",borderRadius:20,fontWeight:600,fontSize:11}}>{cert.id}</span>
+    </div>
+  </div>
+);
+
+// ─── SIDEBAR ───
+const Sidebar = ({items,active,onSelect,user,role,onLogout,open,onClose}) => (
+  <>
+    {open && <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:49,display:"block"}} />}
+    <aside style={{width:220,flexShrink:0,background:C.navyMid,borderRight:`1px solid ${C.border}`,padding:"18px 10px",display:"flex",flexDirection:"column",gap:3,position:"fixed",top:60,bottom:0,left:0,overflowY:"auto",zIndex:50,transform:open||window.innerWidth>768?"none":"translateX(-100%)",transition:"transform 0.3s"}}>
+      <div style={{padding:"8px 10px 14px",marginBottom:8,borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontSize:11,color:"rgba(240,244,255,0.38)",marginBottom:3}}>Signed in as</div>
+        <div style={{fontWeight:700,fontSize:14}}>{user}</div>
+        <div style={{fontSize:11,color:role==="Administrator"?C.red:C.cyan,marginTop:2}}>{role}</div>
+      </div>
+      {items.map(item=>(
+        <button key={item.id} onClick={()=>{onSelect(item.id);onClose&&onClose();}}
+          style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:8,cursor:"pointer",fontSize:14,border:"none",background:active===item.id?"rgba(30,90,245,0.2)":"transparent",color:active===item.id?C.white:C.whiteDim,fontFamily:"inherit",width:"100%",textAlign:"left",borderLeft:active===item.id?"2px solid #1e5af5":"2px solid transparent",transition:"all 0.18s"}}>
+          <span style={{fontSize:16}}>{item.icon}</span> {item.label}
+        </button>
+      ))}
+      <div style={{marginTop:"auto",paddingTop:16}}>
+        <button onClick={onLogout} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:8,cursor:"pointer",fontSize:14,background:"transparent",color:"rgba(240,244,255,0.4)",border:"none",fontFamily:"inherit",width:"100%",textAlign:"left"}}>
+          🚪 Logout
+        </button>
+      </div>
+    </aside>
+  </>
+);
+
+// ─── METRICS ───
+const Metrics = ({items}) => (
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:14,marginBottom:26}}>
+    {items.map(m=>(
+      <div key={m.label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:20}}>
+        <div style={{fontSize:22,marginBottom:5}}>{m.icon}</div>
+        <div style={{fontSize:11,color:C.whiteDim,fontWeight:500,marginBottom:3}}>{m.label}</div>
+        <div style={{fontSize:26,fontWeight:800}}>{m.val}</div>
+        {m.sub&&<div style={{fontSize:11,color:C.green,marginTop:3}}>{m.sub}</div>}
+      </div>
+    ))}
+  </div>
+);
+
+// ─── TABLE STYLES ───
+const TH = {padding:"10px 14px",textAlign:"left",fontSize:11,color:"rgba(240,244,255,0.4)",fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",borderBottom:`1px solid ${C.border}`,background:"rgba(255,255,255,0.02)"};
+const TD = {padding:"12px 14px",fontSize:14,borderBottom:"1px solid rgba(30,90,245,0.07)",verticalAlign:"middle"};
+
+// ─── CARD ───
+const Card = ({children, style={}}) => <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,...style}}>{children}</div>;
+
+// ─── NAV ───
+const Nav = ({goPage, currentRole, onLogout, onMenuClick}) => (
+  <nav style={{position:"fixed",top:0,left:0,right:0,zIndex:100,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",height:60,background:"rgba(10,22,40,0.96)",borderBottom:`1px solid ${C.border}`,backdropFilter:"blur(20px)"}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,fontWeight:800,fontSize:18,cursor:"pointer",color:C.white}} onClick={()=>goPage("home")}>
+      {currentRole && <button onClick={onMenuClick} style={{background:"none",border:"none",color:C.white,fontSize:20,cursor:"pointer",marginRight:4,padding:"0 6px"}}>☰</button>}
+      <div style={{width:30,height:30,background:C.blue,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>🛡</div>
+      <span style={{display:"flex",gap:0}}>Intern<span style={{color:C.cyan}}>Verify</span></span>
+    </div>
+    <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+      {!currentRole && <>
+        <button style={{background:"none",border:"none",color:C.whiteDim,fontSize:14,padding:"7px 10px",borderRadius:7,cursor:"pointer"}} onClick={()=>goPage("about")}>About</button>
+      </>}
+      <button style={{background:"none",border:"none",color:C.whiteDim,fontSize:14,padding:"7px 10px",borderRadius:7,cursor:"pointer"}} onClick={()=>goPage("verify")}>🔍 Verify</button>
+      {currentRole ? (
+        <>
+          <div style={{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.07)",border:`1px solid ${C.border}`,padding:"4px 11px",borderRadius:20,fontSize:12}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:C.green,display:"inline-block"}}/>
+            {currentRole==="student"?"🎓 Student":currentRole==="company"?"🏢 Company":"⚙️ Admin"}
+          </div>
+          <button style={{background:"none",border:"none",color:C.whiteDim,fontSize:13,padding:"7px 10px",borderRadius:7,cursor:"pointer"}} onClick={onLogout}>Logout</button>
+        </>
+      ):(
+        <>
+          <button style={{background:"none",border:`1px solid ${C.border}`,color:C.white,fontSize:14,padding:"6px 13px",borderRadius:7,cursor:"pointer"}} onClick={()=>goPage("login")}>Login</button>
+          <button style={{background:C.blue,border:"none",color:"white",fontSize:14,padding:"7px 15px",borderRadius:7,cursor:"pointer",fontWeight:500}} onClick={()=>goPage("register")}>Register</button>
+        </>
+      )}
+    </div>
+  </nav>
+);
+
+// ══════════════════════════════════
+//  APP
+// ══════════════════════════════════
+function App() {
+  const [page, setPage] = useState("home");
+  const [loginRole, setLoginRole] = useState("student");
+  const [currentRole, setCurrentRole] = useState(null);
+  const [certs, setCerts] = useState(INIT_CERTS);
+  const [toast, setToast] = useState({visible:false,title:"",body:""});
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const [studentTab, setStudentTab] = useState("overview");
+  const [companyTab, setCompanyTab] = useState("overview");
+  const [adminTab, setAdminTab] = useState("overview");
+
+  const [form, setForm] = useState({studentName:"",studentId:"",studentEmail:"",role:"",startDate:"",endDate:"",description:""});
+  const [generatedCert, setGeneratedCert] = useState(null);
+  const [verifyId, setVerifyId] = useState("");
+  const [verifyResult, setVerifyResult] = useState(undefined);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [searchQ, setSearchQ] = useState("");
+  const [companies, setCompanies] = useState([
+    {name:"TechCorp India",email:"hr@techcorp.in",status:"approved"},
+    {name:"Innovate Labs",email:"admin@innovatelabs.com",status:"pending"},
+    {name:"StartupHub",email:"ops@startuphub.io",status:"pending"},
+  ]);
+
+  const notify = useCallback((title, body) => {
+    setToast({visible:true,title,body});
+    setTimeout(()=>setToast(v=>({...v,visible:false})),4000);
+  },[]);
+
+  const goPage = (p) => { setPage(p); setSearchQ(""); setSidebarOpen(false); window.scrollTo(0,0); };
+  const logout = () => { setCurrentRole(null); goPage("home"); notify("👋 Logged Out","You have been signed out."); };
+
+  const doLogin = () => {
+    if(!loginEmail){notify("⚠️ Missing","Please enter your email.");return;}
+    setCurrentRole(loginRole);
+    goPage(loginRole);
+    notify("✅ Welcome!",`Logged in as ${loginRole}`);
+  };
+
+  const doVerify = () => {
+    if(!verifyId.trim()){notify("⚠️ Missing","Please enter a Certificate ID.");return;}
+    const cert = certs.find(c=>c.id===verifyId.trim().toUpperCase());
+    setVerifyResult(cert||null);
+  };
+
+  const issueCert = () => {
+    const {studentName,studentId,role,startDate,endDate} = form;
+    if(!studentName||!studentId||!role||!startDate||!endDate){notify("⚠️ Missing Fields","Please fill all required fields.");return;}
+    const dup = certs.find(c=>c.studentId===studentId&&c.role===role&&c.company==="TechCorp India");
+    if(dup){notify("🚫 Duplicate!",`Certificate ${dup.id} already exists.`);return;}
+    const cert = {id:genId(),studentName,studentId,company:"TechCorp India",role,startDate,endDate,issuedDate:new Date().toISOString().split("T")[0],status:"valid",description:form.description};
+    setCerts(prev=>[...prev,cert]);
+    setGeneratedCert(cert);
+    notify("🎉 Certificate Issued!",`${cert.id} generated for ${studentName}`);
+  };
+
+  const revokeCert = id => { setCerts(prev=>prev.map(c=>c.id===id?{...c,status:"invalid"}:c)); notify("⚠️ Revoked",`Certificate ${id} revoked.`); };
+
+  const myCerts = certs.filter(c=>c.studentId==="STU-2024-001");
+  const companyCerts = certs.filter(c=>c.company==="TechCorp India");
+
+  // ── GRID BG ──
+  const GridBg = () => (
+    <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(30,90,245,0.05) 1px,transparent 1px),linear-gradient(90deg,rgba(30,90,245,0.05) 1px,transparent 1px)",backgroundSize:"60px 60px",WebkitMaskImage:"radial-gradient(ellipse 80% 80% at 50% 50%,black,transparent)",pointerEvents:"none"}}/>
+  );
+
+  // ───────── HOME ─────────
+  if(page==="home") return (
+    <div style={{background:C.navy,color:C.white,minHeight:"100vh",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+      <Nav goPage={goPage} currentRole={currentRole} onLogout={logout} />
+      <div style={{paddingTop:60,position:"relative",overflow:"hidden"}}>
+        <GridBg/>
+        <div style={{position:"absolute",width:500,height:500,borderRadius:"50%",background:"rgba(30,90,245,0.09)",filter:"blur(80px)",top:-150,left:-150,pointerEvents:"none"}}/>
+        <div style={{position:"absolute",width:350,height:350,borderRadius:"50%",background:"rgba(0,212,255,0.06)",filter:"blur(70px)",bottom:-80,right:-100,pointerEvents:"none"}}/>
+
+        {/* HERO */}
+        <div style={{minHeight:"calc(100vh - 60px)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"60px 20px 40px",textAlign:"center",position:"relative",zIndex:1}}>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:"rgba(0,212,255,0.1)",border:"1px solid rgba(0,212,255,0.3)",padding:"5px 16px",borderRadius:20,fontSize:13,color:C.cyan,marginBottom:22,fontWeight:500}}>
+            🔐 Trusted Internship Certificate Verification
+          </div>
+          <h1 style={{fontSize:"clamp(2rem,6vw,4rem)",fontWeight:800,lineHeight:1.08,letterSpacing:"-0.02em",marginBottom:16,background:"linear-gradient(135deg,#f0f4ff 30%,#00d4ff)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>
+            Stop Fake Internship<br/>Certificates. Forever.
+          </h1>
+          <p style={{fontSize:"clamp(14px,2vw,17px)",color:C.whiteDim,maxWidth:560,marginBottom:34,lineHeight:1.7}}>
+            InternVerify connects companies, students, and colleges to issue, manage, and verify internship certificates with cryptographic certainty.
+          </p>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",justifyContent:"center",marginBottom:60}}>
+            <Btn onClick={()=>goPage("verify")}>🔍 Verify a Certificate</Btn>
+            <Btn v="outline" onClick={()=>goPage("register")}>Get Started Free</Btn>
+          </div>
+          <div style={{display:"flex",gap:40,flexWrap:"wrap",justifyContent:"center"}}>
+            {[["12K+","Certificates Issued"],["340+","Companies"],["98.7%","Accuracy"],["0","Fakes Issued"]].map(([n,l])=>(
+              <div key={l} style={{textAlign:"center"}}>
+                <div style={{fontSize:26,fontWeight:800,color:C.cyan}}>{n}</div>
+                <div style={{fontSize:12,color:"rgba(240,244,255,0.45)",marginTop:3}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* FEATURES */}
+        <div style={{padding:"70px 5vw",position:"relative",zIndex:1}}>
+          <div style={{fontSize:11,color:C.cyan,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>⚡ Core Features</div>
+          <h2 style={{fontSize:"clamp(1.6rem,3vw,2.4rem)",fontWeight:800,marginBottom:10}}>Everything to fight certificate fraud</h2>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16,marginTop:40}}>
+            {[["🔐","Unique Certificate IDs","Every certificate gets a cryptographically unique ID that cannot be duplicated."],["📱","QR Code Verification","Instant verification by scanning — works on any smartphone browser."],["📄","PDF Downloads","Students download beautifully designed certificates with embedded verification."],["🏢","Company Dashboards","HR teams issue, track, and manage all internship certificates in one place."],["🎓","Student Profiles","Students get a personal portfolio of verified certificates."],["🛡","Duplicate Detection","Automatically flags any attempt to issue duplicate certificates."]].map(([icon,title,desc])=>(
+              <div key={title} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:22}}>
+                <div style={{width:40,height:40,borderRadius:9,background:"rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,marginBottom:12}}>{icon}</div>
+                <div style={{fontWeight:700,marginBottom:7,fontFamily:"'Syne',sans-serif"}}>{title}</div>
+                <div style={{fontSize:13,color:C.whiteDim,lineHeight:1.6}}>{desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* HOW IT WORKS */}
+        <div style={{padding:"60px 5vw",background:C.navyMid,position:"relative",zIndex:1}}>
+          <div style={{textAlign:"center",marginBottom:40}}>
+            <div style={{fontSize:11,color:C.cyan,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>📋 How It Works</div>
+            <h2 style={{fontSize:"clamp(1.6rem,3vw,2.4rem)",fontWeight:800}}>Simple 3-Step Process</h2>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:20,maxWidth:860,margin:"0 auto"}}>
+            {[["1","Company Issues","HR enters student details. System generates unique certificate with QR code."],["2","Student Receives","Student is notified, downloads PDF, shares verification link."],["3","Anyone Verifies","Any third party verifies authenticity in seconds by ID or QR scan."]].map(([n,t,d])=>(
+              <div key={n} style={{textAlign:"center",padding:24}}>
+                <div style={{width:52,height:52,borderRadius:"50%",background:"linear-gradient(135deg,#1e5af5,#00d4ff)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:20,margin:"0 auto 16px"}}>{n}</div>
+                <div style={{fontWeight:700,marginBottom:8,fontFamily:"'Syne',sans-serif"}}>{t}</div>
+                <div style={{fontSize:13,color:C.whiteDim,lineHeight:1.6}}>{d}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ROLES */}
+        <div style={{padding:"70px 5vw",position:"relative",zIndex:1}}>
+          <div style={{fontSize:11,color:C.cyan,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:10}}>👥 User Roles</div>
+          <h2 style={{fontSize:"clamp(1.6rem,3vw,2.4rem)",fontWeight:800,marginBottom:36}}>Built for every stakeholder</h2>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:18}}>
+            {[["🎓","Students","View, download, and share your verified internship certificates with employers and colleges.","student"],["🏢","Companies","Issue authentic certificates, manage intern records, prevent fraud.","company"],["⚙️","Administrators","Oversee platform, approve companies, monitor all certificates.","admin"]].map(([icon,title,desc,role])=>(
+              <div key={role} onClick={()=>{setLoginRole(role);goPage("login");}} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-5px)"} onMouseLeave={e=>e.currentTarget.style.transform="none"} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:28,cursor:"pointer",textAlign:"center",transition:"transform 0.2s"}}>
+                <div style={{fontSize:36,marginBottom:12}}>{icon}</div>
+                <div style={{fontWeight:700,fontSize:16,marginBottom:9,fontFamily:"'Syne',sans-serif"}}>{title}</div>
+                <div style={{fontSize:13,color:C.whiteDim,lineHeight:1.6,marginBottom:16}}>{desc}</div>
+                <Btn v="outline" size="sm">{title} Login →</Btn>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <footer style={{background:C.navyMid,borderTop:`1px solid ${C.border}`,padding:"30px 20px",textAlign:"center"}}>
+          <div style={{fontWeight:800,fontSize:16,marginBottom:7,fontFamily:"'Syne',sans-serif"}}>Intern<span style={{color:C.cyan}}>Verify</span></div>
+          <div style={{fontSize:13,color:"rgba(240,244,255,0.4)"}}>© 2025 InternVerify — Trusted Internship Certificate Verification</div>
+        </footer>
+      </div>
+      <Toast {...toast} />
+    </div>
+  );
+
+  // ───────── ABOUT ─────────
+  if(page==="about") return (
+    <div style={{background:C.navy,color:C.white,minHeight:"100vh",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+      <Nav goPage={goPage} currentRole={currentRole} onLogout={logout} />
+      <div style={{paddingTop:80,maxWidth:860,margin:"0 auto",padding:"80px 24px"}}>
+        <div style={{fontSize:11,color:C.cyan,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:12}}>📖 About</div>
+        <h1 style={{fontSize:"clamp(1.8rem,4vw,3rem)",fontWeight:800,marginBottom:16}}>Fighting Internship Certificate Fraud</h1>
+        <p style={{color:C.whiteDim,lineHeight:1.8,marginBottom:20,fontSize:15}}>InternVerify was built to solve a real and growing problem: fake internship certificates. As digital documents became easier to forge, employers and colleges were losing trust in internship credentials. We built a system where authenticity is mathematically guaranteed.</p>
+        <p style={{color:C.whiteDim,lineHeight:1.8,marginBottom:32,fontSize:15}}>Every certificate on InternVerify is assigned a cryptographically unique identifier linked to the issuing company's verified account. The QR code on each certificate points to our verification server — making forgery practically impossible.</p>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:36}}>
+          {[["🔒","Immutable Records","Once issued, certificates cannot be altered."],["✅","Instant Verification","Sub-second verification from anywhere, 24/7."],["🌐","Public Access","Free and open verification for anyone."],["🔔","Real-time Alerts","Students notified instantly on certificate issue."]].map(([icon,title,desc])=>(
+            <div key={title} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:18}}>
+              <div style={{fontSize:20,marginBottom:9}}>{icon}</div>
+              <div style={{fontWeight:700,marginBottom:5,fontFamily:"'Syne',sans-serif"}}>{title}</div>
+              <div style={{fontSize:13,color:C.whiteDim,lineHeight:1.5}}>{desc}</div>
+            </div>
+          ))}
+        </div>
+        <Btn onClick={()=>goPage("register")}>Join InternVerify →</Btn>
+      </div>
+      <Toast {...toast} />
+    </div>
+  );
+
+  // ───────── VERIFY ─────────
+  if(page==="verify") return (
+    <div style={{background:C.navy,color:C.white,minHeight:"100vh",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+      <Nav goPage={goPage} currentRole={currentRole} onLogout={logout} />
+      <div style={{paddingTop:60,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px",position:"relative"}}>
+        <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse 50% 50% at 50% 40%,rgba(0,212,255,0.06),transparent)",pointerEvents:"none"}}/>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:18,padding:"36px 28px",width:"100%",maxWidth:520,position:"relative",zIndex:1,boxShadow:"0 40px 100px rgba(0,0,0,0.5)"}}>
+          <div style={{textAlign:"center",marginBottom:26}}>
+            <div style={{fontSize:44,marginBottom:10}}>🔍</div>
+            <h2 style={{fontSize:24,fontWeight:800,marginBottom:7}}>Verify Certificate</h2>
+            <p style={{color:C.whiteDim,fontSize:14}}>Enter the Certificate ID to verify authenticity instantly</p>
+          </div>
+          <Input label="Certificate ID" placeholder="e.g. IV-2025-A7K3P9" value={verifyId} onChange={e=>{setVerifyId(e.target.value);setVerifyResult(undefined);}} onKeyDown={e=>e.key==="Enter"&&doVerify()} style={{textAlign:"center",fontSize:16,letterSpacing:"0.04em"}} />
+          <Btn onClick={doVerify} style={{width:"100%",justifyContent:"center",fontSize:15}}>Verify Now →</Btn>
+          <div style={{textAlign:"center",margin:"14px 0",color:"rgba(240,244,255,0.3)",fontSize:12}}>— try: IV-2025-A7K3P9 —</div>
+
+          {verifyResult===null && (
+            <div style={{padding:20,borderRadius:12,background:"rgba(255,77,109,0.05)",border:"1px solid rgba(255,77,109,0.3)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
+                <span style={{fontSize:26}}>❌</span>
+                <div>
+                  <div style={{fontWeight:700,color:C.red}}>Certificate Invalid</div>
+                  <div style={{fontSize:13,color:C.whiteDim}}>No certificate found with ID: <strong>{verifyId}</strong></div>
+                </div>
+              </div>
+              <div style={{fontSize:13,color:C.whiteDim}}>If you believe this is an error, contact the issuing company.</div>
+            </div>
+          )}
+
+          {verifyResult && (
+            <div style={{padding:20,borderRadius:12,background:"rgba(0,229,160,0.05)",border:"1px solid rgba(0,229,160,0.3)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+                <span style={{fontSize:26}}>✅</span>
+                <div>
+                  <div style={{fontWeight:700,color:C.green}}>Certificate Valid</div>
+                  <div style={{fontSize:13,color:C.whiteDim}}>This certificate is authentic and verified.</div>
+                </div>
+              </div>
+              <div style={{height:1,background:`${C.border}`,marginBottom:14}}/>
+              {[["Certificate ID",verifyResult.id,true],["Student Name",verifyResult.studentName],["Company",verifyResult.company],["Role",verifyResult.role],["Duration",getDur(verifyResult.startDate,verifyResult.endDate)],["Period",`${fmt(verifyResult.startDate)} – ${fmt(verifyResult.endDate)}`],["Issued On",fmt(verifyResult.issuedDate)]].map(([l,v,mono])=>(
+                <div key={l} style={{display:"flex",gap:12,marginBottom:9}}>
+                  <div style={{fontSize:12,color:C.whiteDim,minWidth:110,fontWeight:500,flexShrink:0}}>{l}</div>
+                  <div style={{fontSize:13,fontWeight:500,color:mono?C.cyan:C.white,fontFamily:mono?"monospace":"inherit"}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <Toast {...toast} />
+    </div>
+  );
+
+  // ───────── LOGIN ─────────
+  if(page==="login") return (
+    <div style={{background:C.navy,color:C.white,minHeight:"100vh",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+      <Nav goPage={goPage} currentRole={currentRole} onLogout={logout} />
+      <div style={{paddingTop:60,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:18,padding:"36px 28px",width:"100%",maxWidth:420,boxShadow:"0 40px 100px rgba(0,0,0,0.5)"}}>
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <div style={{fontSize:34,marginBottom:8}}>🛡</div>
+            <h2 style={{fontSize:22,fontWeight:800,marginBottom:5}}>Welcome Back</h2>
+            <p style={{color:C.whiteDim,fontSize:14}}>Sign in to your InternVerify account</p>
+          </div>
+          <div style={{display:"flex",gap:4,background:"rgba(255,255,255,0.05)",borderRadius:9,padding:4,marginBottom:22}}>
+            {[["student","🎓 Student"],["company","🏢 Company"],["admin","⚙️ Admin"]].map(([r,lbl])=>(
+              <button key={r} onClick={()=>setLoginRole(r)} style={{flex:1,padding:"8px 4px",border:"none",borderRadius:7,cursor:"pointer",fontSize:13,fontFamily:"inherit",background:loginRole===r?C.blue:"transparent",color:loginRole===r?"white":C.whiteDim,fontWeight:loginRole===r?500:400,transition:"all 0.2s"}}>{lbl}</button>
+            ))}
+          </div>
+          <Input label="Email Address" type="email" placeholder="you@example.com" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doLogin()} />
+          <Input label="Password" type="password" placeholder="••••••••" style={{marginBottom:22}} />
+          <Btn onClick={doLogin} style={{width:"100%",justifyContent:"center"}}>Sign In →</Btn>
+          <div style={{textAlign:"center",marginTop:18,fontSize:13,color:C.whiteDim}}>
+            Don't have an account? <span style={{color:C.cyan,cursor:"pointer"}} onClick={()=>goPage("register")}>Register here</span>
+          </div>
+        </div>
+      </div>
+      <Toast {...toast} />
+    </div>
+  );
+
+  // ───────── REGISTER ─────────
+  if(page==="register") return (
+    <div style={{background:C.navy,color:C.white,minHeight:"100vh",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+      <Nav goPage={goPage} currentRole={currentRole} onLogout={logout} />
+      <div style={{paddingTop:60,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:18,padding:"36px 28px",width:"100%",maxWidth:420,boxShadow:"0 40px 100px rgba(0,0,0,0.5)"}}>
+          <div style={{textAlign:"center",marginBottom:22}}>
+            <div style={{fontSize:34,marginBottom:8}}>✨</div>
+            <h2 style={{fontSize:22,fontWeight:800,marginBottom:5}}>Create Account</h2>
+            <p style={{color:C.whiteDim,fontSize:14}}>Join thousands of verified users</p>
+          </div>
+          <Input label="Full Name" placeholder="Your full name" />
+          <Input label="Email Address" type="email" placeholder="you@example.com" />
+          <Input label="Password" type="password" placeholder="Create a strong password" />
+          <Btn onClick={()=>{notify("✅ Registered!","Account created. Please login.");goPage("login");}} style={{width:"100%",justifyContent:"center",marginTop:6}}>Create Account →</Btn>
+          <div style={{textAlign:"center",marginTop:16,fontSize:13,color:C.whiteDim}}>
+            Already registered? <span style={{color:C.cyan,cursor:"pointer"}} onClick={()=>goPage("login")}>Sign in</span>
+          </div>
+        </div>
+      </div>
+      <Toast {...toast} />
+    </div>
+  );
+
+  // ───────── STUDENT DASHBOARD ─────────
+  if(page==="student") {
+    const filtered = myCerts.filter(c=>!searchQ||c.role.toLowerCase().includes(searchQ.toLowerCase())||c.company.toLowerCase().includes(searchQ.toLowerCase())||c.id.toLowerCase().includes(searchQ.toLowerCase()));
+    return (
+      <div style={{background:C.navy,color:C.white,minHeight:"100vh",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+        <Nav goPage={goPage} currentRole={currentRole} onLogout={logout} onMenuClick={()=>setSidebarOpen(v=>!v)} />
+        <div style={{display:"flex",paddingTop:60,minHeight:"100vh"}}>
+          <Sidebar items={[{id:"overview",icon:"📊",label:"Overview"},{id:"certificates",icon:"📜",label:"My Certificates"},{id:"share",icon:"🔗",label:"Share & Download"}]} active={studentTab} onSelect={setStudentTab} user="Arjun Mehta" role="Student" onLogout={logout} open={sidebarOpen} onClose={()=>setSidebarOpen(false)} />
+          <main style={{marginLeft:window.innerWidth>768?220:0,flex:1,padding:"28px 20px 60px",minWidth:0}}>
+
+            {studentTab==="overview" && <>
+              <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Student Dashboard</h1><p style={{color:C.whiteDim,fontSize:14}}>Welcome back, Arjun 👋</p></div>
+              <Metrics items={[{icon:"📜",label:"Total Certificates",val:myCerts.length,sub:"Your internships"},{icon:"✅",label:"Verified",val:myCerts.filter(c=>c.status==="valid").length,sub:"All authenticated"},{icon:"👁",label:"Profile Views",val:47,sub:"This week"}]} />
+              <Card>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 18px",borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{fontWeight:700}}>My Certificates</div>
+                  <Btn v="outline" size="sm" onClick={()=>setStudentTab("certificates")}>View All</Btn>
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr>{["ID","Company","Role","Duration","Status",""].map(h=><th key={h} style={TH}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {myCerts.map(c=>(
+                        <tr key={c.id}>
+                          <td style={{...TD,color:C.cyan,fontFamily:"monospace",fontSize:11}}>{c.id}</td>
+                          <td style={TD}>{c.company}</td>
+                          <td style={TD}>{c.role}</td>
+                          <td style={TD}>{getDur(c.startDate,c.endDate)}</td>
+                          <td style={TD}><Badge status={c.status}/></td>
+                          <td style={TD}><Btn v="outline" size="sm" onClick={()=>{setVerifyId(c.id);setVerifyResult(undefined);goPage("verify");}}>Verify</Btn></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+              <div style={{marginTop:18,background:"rgba(0,212,255,0.05)",border:"1px solid rgba(0,212,255,0.2)",borderRadius:12,padding:16,display:"flex",alignItems:"center",gap:12}}>
+                <span style={{fontSize:22}}>🔔</span>
+                <div>
+                  <div style={{fontWeight:600,fontSize:14}}>New Certificate Issued</div>
+                  <div style={{fontSize:12,color:C.whiteDim,marginTop:2}}>TechCorp India issued your internship certificate.</div>
+                </div>
+              </div>
+            </>}
+
+            {studentTab==="certificates" && <>
+              <div style={{marginBottom:20}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>My Certificates</h1></div>
+              <input style={{width:"100%",maxWidth:360,padding:"10px 14px",borderRadius:9,background:"rgba(255,255,255,0.06)",border:`1px solid ${C.border}`,color:C.white,fontSize:14,outline:"none",marginBottom:18}} placeholder="Search certificates…" value={searchQ} onChange={e=>setSearchQ(e.target.value)} />
+              {filtered.length===0 ? <div style={{textAlign:"center",padding:"50px 20px",color:C.whiteDim}}>🔍 No certificates found.</div> :
+                filtered.map(c=>(
+                  <Card key={c.id} style={{padding:22,marginBottom:14}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+                      <div>
+                        <div style={{fontFamily:"monospace",fontSize:11,color:C.cyan,marginBottom:3}}>{c.id}</div>
+                        <div style={{fontWeight:700,fontSize:15}}>{c.role}</div>
+                        <div style={{fontSize:13,color:C.whiteDim,marginTop:2}}>{c.company}</div>
+                      </div>
+                      <Badge status={c.status}/>
+                    </div>
+                    <div style={{display:"flex",gap:16,fontSize:12,color:"rgba(240,244,255,0.5)",marginBottom:14,flexWrap:"wrap"}}>
+                      <span>📅 {fmt(c.startDate)} – {fmt(c.endDate)}</span>
+                      <span>⏱ {getDur(c.startDate,c.endDate)}</span>
+                    </div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      <Btn v="outline" size="sm" onClick={()=>{setVerifyId(c.id);setVerifyResult(undefined);goPage("verify");}}>🔍 Verify</Btn>
+                      <Btn v="outline" size="sm" onClick={()=>{try{navigator.clipboard.writeText(`https://internverify.app/verify/${c.id}`);}catch(e){}notify("📋 Copied!","Verification link copied.");}}>🔗 Share</Btn>
+                    </div>
+                  </Card>
+                ))
+              }
+            </>}
+
+            {studentTab==="share" && <>
+              <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Share & Download</h1></div>
+              <Card style={{padding:22,marginBottom:16}}>
+                <div style={{fontWeight:700,marginBottom:14}}>🔗 Your Profile Verification Link</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <input readOnly value="https://internverify.app/student/ARJ-2024-001" style={{flex:1,padding:"10px 13px",borderRadius:9,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,color:C.white,fontSize:13,minWidth:0}} />
+                  <Btn v="cyan" size="sm" onClick={()=>{try{navigator.clipboard.writeText("https://internverify.app/student/ARJ-2024-001");}catch(e){}notify("📋 Copied!","Profile link copied.");}}>Copy</Btn>
+                </div>
+              </Card>
+              <Card>
+                <div style={{padding:"16px 18px",borderBottom:`1px solid ${C.border}`,fontWeight:700}}>📜 Certificates</div>
+                {myCerts.map(c=>(
+                  <div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"13px 18px",borderBottom:`1px solid rgba(30,90,245,0.07)`,flexWrap:"wrap",gap:10}}>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:14}}>{c.role} — {c.company}</div>
+                      <div style={{fontFamily:"monospace",fontSize:11,color:"rgba(240,244,255,0.4)",marginTop:2}}>{c.id}</div>
+                    </div>
+                    <Btn v="outline" size="sm" onClick={()=>{setVerifyId(c.id);setVerifyResult(undefined);goPage("verify");}}>🔍 Verify</Btn>
+                  </div>
+                ))}
+              </Card>
+            </>}
+          </main>
+        </div>
+        <Toast {...toast} />
+      </div>
+    );
+  }
+
+  // ───────── COMPANY DASHBOARD ─────────
+  if(page==="company") {
+    const filteredCC = companyCerts.filter(c=>!searchQ||c.studentName.toLowerCase().includes(searchQ.toLowerCase())||c.id.toLowerCase().includes(searchQ.toLowerCase())||c.role.toLowerCase().includes(searchQ.toLowerCase()));
+    return (
+      <div style={{background:C.navy,color:C.white,minHeight:"100vh",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+        <Nav goPage={goPage} currentRole={currentRole} onLogout={logout} onMenuClick={()=>setSidebarOpen(v=>!v)} />
+        <div style={{display:"flex",paddingTop:60,minHeight:"100vh"}}>
+          <Sidebar items={[{id:"overview",icon:"📊",label:"Overview"},{id:"issue",icon:"➕",label:"Issue Certificate"},{id:"issued",icon:"📋",label:"Issued Certs"},{id:"interns",icon:"👥",label:"Intern Records"}]} active={companyTab} onSelect={t=>{setCompanyTab(t);setSearchQ("");setGeneratedCert(null);}} user="TechCorp India" role="Company" onLogout={logout} open={sidebarOpen} onClose={()=>setSidebarOpen(false)} />
+          <main style={{marginLeft:window.innerWidth>768?220:0,flex:1,padding:"28px 20px 60px",minWidth:0}}>
+
+            {companyTab==="overview" && <>
+              <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Company Dashboard</h1><p style={{color:C.whiteDim,fontSize:14}}>Issue and manage internship certificates</p></div>
+              <Metrics items={[{icon:"📜",label:"Total Issued",val:companyCerts.length,sub:"Certificates"},{icon:"🕐",label:"This Month",val:companyCerts.filter(c=>c.issuedDate?.startsWith("2025")).length,sub:"New"},{icon:"👁",label:"Verifications",val:128,sub:"Times checked"},{icon:"⚠️",label:"Duplicates Blocked",val:0,sub:"Clean record"}]} />
+              <Card>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 18px",borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{fontWeight:700}}>Recently Issued</div>
+                  <Btn v="primary" size="sm" onClick={()=>setCompanyTab("issue")}>+ Issue New</Btn>
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr>{["Cert ID","Student","Role","Issued","Status"].map(h=><th key={h} style={TH}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {companyCerts.slice().reverse().slice(0,5).map(c=>(
+                        <tr key={c.id}>
+                          <td style={{...TD,color:C.cyan,fontFamily:"monospace",fontSize:11}}>{c.id}</td>
+                          <td style={TD}>{c.studentName}</td>
+                          <td style={TD}>{c.role}</td>
+                          <td style={TD}>{fmt(c.issuedDate)}</td>
+                          <td style={TD}><Badge status={c.status}/></td>
+                        </tr>
+                      ))}
+                      {companyCerts.length===0&&<tr><td colSpan={5} style={{...TD,textAlign:"center",color:C.whiteDim,padding:40}}>No certificates yet. Issue one to get started.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </>}
+
+            {companyTab==="issue" && <>
+              <div style={{marginBottom:22}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Issue Certificate</h1><p style={{color:C.whiteDim,fontSize:14}}>Generate a new verified internship certificate</p></div>
+              <Card style={{padding:26,marginBottom:18}}>
+                <div style={{fontWeight:700,marginBottom:20,fontFamily:"'Syne',sans-serif"}}>📝 Certificate Details</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:4}}>
+                  <Input label="Student Full Name *" placeholder="e.g. Priya Sharma" value={form.studentName} onChange={e=>setForm(f=>({...f,studentName:e.target.value}))} />
+                  <Input label="Student ID *" placeholder="e.g. STU-2024-042" value={form.studentId} onChange={e=>setForm(f=>({...f,studentId:e.target.value}))} />
+                  <Input label="Student Email" type="email" placeholder="student@college.edu" value={form.studentEmail} onChange={e=>setForm(f=>({...f,studentEmail:e.target.value}))} />
+                  <Input label="Internship Role *" placeholder="e.g. Frontend Developer Intern" value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} />
+                  <Input label="Start Date *" type="date" value={form.startDate} onChange={e=>setForm(f=>({...f,startDate:e.target.value}))} />
+                  <Input label="End Date *" type="date" value={form.endDate} onChange={e=>setForm(f=>({...f,endDate:e.target.value}))} />
+                </div>
+                <Input label="Description (optional)" placeholder="Brief description of work done" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} />
+                <div style={{height:1,background:C.border,margin:"18px 0"}}/>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  <Btn onClick={issueCert}>🎓 Generate Certificate</Btn>
+                  <Btn v="outline" onClick={()=>{setForm({studentName:"",studentId:"",studentEmail:"",role:"",startDate:"",endDate:"",description:""});setGeneratedCert(null);}}>Clear</Btn>
+                </div>
+              </Card>
+              {generatedCert && <>
+                <CertCard cert={generatedCert}/>
+                <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
+                  <Btn v="outline" size="sm" onClick={()=>{try{navigator.clipboard.writeText(`https://internverify.app/verify/${generatedCert.id}`);}catch(e){}notify("📋 Copied!","Verification link copied.");}}>🔗 Copy Link</Btn>
+                  <Btn v="success" size="sm" onClick={()=>notify("🔔 Sent!","Student notified.")}>🔔 Notify Student</Btn>
+                  <Btn v="outline" size="sm" onClick={()=>{setVerifyId(generatedCert.id);setVerifyResult(undefined);goPage("verify");}}>🔍 Verify This</Btn>
+                </div>
+              </>}
+            </>}
+
+            {companyTab==="issued" && <>
+              <div style={{marginBottom:18}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Issued Certificates</h1></div>
+              <input style={{width:"100%",maxWidth:360,padding:"10px 14px",borderRadius:9,background:"rgba(255,255,255,0.06)",border:`1px solid ${C.border}`,color:C.white,fontSize:14,outline:"none",marginBottom:16}} placeholder="Search…" value={searchQ} onChange={e=>setSearchQ(e.target.value)} />
+              <Card>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr>{["Cert ID","Student","Role","Duration","Status","Actions"].map(h=><th key={h} style={TH}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {filteredCC.map(c=>(
+                        <tr key={c.id}>
+                          <td style={{...TD,color:C.cyan,fontFamily:"monospace",fontSize:11}}>{c.id}</td>
+                          <td style={TD}>{c.studentName}</td>
+                          <td style={TD}>{c.role}</td>
+                          <td style={TD}>{getDur(c.startDate,c.endDate)}</td>
+                          <td style={TD}><Badge status={c.status}/></td>
+                          <td style={TD}><Btn v="danger" size="sm" onClick={()=>revokeCert(c.id)}>Revoke</Btn></td>
+                        </tr>
+                      ))}
+                      {filteredCC.length===0&&<tr><td colSpan={6} style={{...TD,textAlign:"center",color:C.whiteDim,padding:40}}>No certificates found.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </>}
+
+            {companyTab==="interns" && <>
+              <div style={{marginBottom:22}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Intern Records</h1></div>
+              <Card>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr>{["Student ID","Name","Role","Duration","Certificate"].map(h=><th key={h} style={TH}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {companyCerts.map(c=>(
+                        <tr key={c.id}>
+                          <td style={{...TD,fontFamily:"monospace",fontSize:11}}>{c.studentId}</td>
+                          <td style={TD}>{c.studentName}</td>
+                          <td style={TD}>{c.role}</td>
+                          <td style={TD}>{getDur(c.startDate,c.endDate)}</td>
+                          <td style={{...TD,color:C.cyan,fontFamily:"monospace",fontSize:11}}>{c.id}</td>
+                        </tr>
+                      ))}
+                      {companyCerts.length===0&&<tr><td colSpan={5} style={{...TD,textAlign:"center",color:C.whiteDim,padding:40}}>No intern records yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </>}
+          </main>
+        </div>
+        <Toast {...toast} />
+      </div>
+    );
+  }
+
+  // ───────── ADMIN DASHBOARD ─────────
+  if(page==="admin") {
+    const filteredAC = certs.filter(c=>!searchQ||c.studentName.toLowerCase().includes(searchQ.toLowerCase())||c.id.toLowerCase().includes(searchQ.toLowerCase())||c.company.toLowerCase().includes(searchQ.toLowerCase()));
+    return (
+      <div style={{background:C.navy,color:C.white,minHeight:"100vh",fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+        <Nav goPage={goPage} currentRole={currentRole} onLogout={logout} onMenuClick={()=>setSidebarOpen(v=>!v)} />
+        <div style={{display:"flex",paddingTop:60,minHeight:"100vh"}}>
+          <Sidebar items={[{id:"overview",icon:"📊",label:"Overview"},{id:"companies",icon:"🏢",label:"Companies"},{id:"certificates",icon:"📜",label:"All Certificates"},{id:"users",icon:"👥",label:"Users"},{id:"duplicates",icon:"⚠️",label:"Duplicates"}]} active={adminTab} onSelect={t=>{setAdminTab(t);setSearchQ("");}} user="System Admin" role="Administrator" onLogout={logout} open={sidebarOpen} onClose={()=>setSidebarOpen(false)} />
+          <main style={{marginLeft:window.innerWidth>768?220:0,flex:1,padding:"28px 20px 60px",minWidth:0}}>
+
+            {adminTab==="overview" && <>
+              <div style={{marginBottom:24}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Admin Dashboard</h1><p style={{color:C.whiteDim,fontSize:14}}>System-wide overview</p></div>
+              <Metrics items={[{icon:"🏢",label:"Companies",val:companies.length,sub:`${companies.filter(c=>c.status==="pending").length} pending`},{icon:"🎓",label:"Students",val:1,sub:"Registered"},{icon:"📜",label:"Total Certs",val:certs.length,sub:"Platform-wide"},{icon:"⚠️",label:"Flagged",val:0,sub:"All clean"}]} />
+              <Card>
+                <div style={{padding:"16px 18px",borderBottom:`1px solid ${C.border}`,fontWeight:700}}>Platform Activity</div>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead><tr>{["Time","Event","Actor","Status"].map(h=><th key={h} style={TH}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {[["2 min ago","Certificate Issued","TechCorp India","valid"],["15 min ago","Verification","Anonymous","valid"],["1 hr ago","Company Registered","Innovate Labs","pending"],["2 hr ago","Student Login","Arjun Mehta","valid"],["Yesterday","Company Registered","StartupHub","pending"]].map(([t,e,a,s])=>(
+                      <tr key={t+e}><td style={TD}>{t}</td><td style={TD}>{e}</td><td style={TD}>{a}</td><td style={TD}><Badge status={s}/></td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </>}
+
+            {adminTab==="companies" && <>
+              <div style={{marginBottom:22}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Company Management</h1></div>
+              <Card>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead><tr>{["Company","Email","Certs","Status","Actions"].map(h=><th key={h} style={TH}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {companies.map((co,i)=>(
+                      <tr key={co.name}>
+                        <td style={TD}><strong>{co.name}</strong></td>
+                        <td style={TD}>{co.email}</td>
+                        <td style={TD}>{certs.filter(c=>c.company===co.name).length}</td>
+                        <td style={TD}><Badge status={co.status}/></td>
+                        <td style={TD}>
+                          {co.status==="pending"?<>
+                            <Btn v="success" size="sm" onClick={()=>{setCompanies(prev=>prev.map((c,j)=>j===i?{...c,status:"approved"}:c));notify("✅ Approved",`${co.name} approved.`);}}>Approve</Btn>
+                            <Btn v="danger" size="sm" style={{marginLeft:6}} onClick={()=>{setCompanies(prev=>prev.filter((_,j)=>j!==i));notify("🗑 Rejected",`${co.name} rejected.`);}}>Reject</Btn>
+                          </>:
+                            <Btn v="danger" size="sm" onClick={()=>notify("⚠️ Action","Company suspended.")}>Suspend</Btn>
+                          }
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </>}
+
+            {adminTab==="certificates" && <>
+              <div style={{marginBottom:18}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>All Certificates</h1></div>
+              <input style={{width:"100%",maxWidth:360,padding:"10px 14px",borderRadius:9,background:"rgba(255,255,255,0.06)",border:`1px solid ${C.border}`,color:C.white,fontSize:14,outline:"none",marginBottom:16}} placeholder="Search…" value={searchQ} onChange={e=>setSearchQ(e.target.value)} />
+              <Card>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                    <thead><tr>{["Cert ID","Student","Company","Role","Issued","Status","Actions"].map(h=><th key={h} style={TH}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {filteredAC.slice().reverse().map(c=>(
+                        <tr key={c.id}>
+                          <td style={{...TD,color:C.cyan,fontFamily:"monospace",fontSize:11}}>{c.id}</td>
+                          <td style={TD}>{c.studentName}</td>
+                          <td style={TD}>{c.company}</td>
+                          <td style={TD}>{c.role}</td>
+                          <td style={TD}>{fmt(c.issuedDate)}</td>
+                          <td style={TD}><Badge status={c.status}/></td>
+                          <td style={TD}><Btn v="danger" size="sm" onClick={()=>revokeCert(c.id)}>Revoke</Btn></td>
+                        </tr>
+                      ))}
+                      {filteredAC.length===0&&<tr><td colSpan={7} style={{...TD,textAlign:"center",color:C.whiteDim,padding:36}}>No certificates found.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </>}
+
+            {adminTab==="users" && <>
+              <div style={{marginBottom:22}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>User Management</h1></div>
+              <Card>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead><tr>{["Name","Role","Email","Joined","Actions"].map(h=><th key={h} style={TH}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    <tr><td style={TD}>Arjun Mehta</td><td style={TD}><Badge status="approved"/></td><td style={TD}>arjun@college.edu</td><td style={TD}>Jan 2025</td><td style={TD}><Btn v="danger" size="sm" onClick={()=>notify("⚠️ Action","User suspended.")}>Suspend</Btn></td></tr>
+                    {companies.filter(c=>c.status==="approved").map(co=>(
+                      <tr key={co.name}><td style={TD}>{co.name}</td><td style={TD}><Badge status="valid"/></td><td style={TD}>{co.email}</td><td style={TD}>Dec 2024</td><td style={TD}><Btn v="danger" size="sm" onClick={()=>notify("⚠️ Action","Company suspended.")}>Suspend</Btn></td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </>}
+
+            {adminTab==="duplicates" && <>
+              <div style={{marginBottom:22}}><h1 style={{fontSize:24,fontWeight:800,marginBottom:5}}>Duplicate Detection</h1></div>
+              <Card style={{padding:50,textAlign:"center"}}>
+                <div style={{fontSize:48,marginBottom:14}}>✅</div>
+                <h3 style={{color:C.green,marginBottom:10,fontFamily:"'Syne',sans-serif"}}>No Duplicates Detected</h3>
+                <p style={{color:C.whiteDim,fontSize:14}}>Our system continuously scans all {certs.length} records. Currently all clean.</p>
+              </Card>
+            </>}
+          </main>
+        </div>
+        <Toast {...toast} />
+      </div>
+    );
+  }
+
+  return null;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
